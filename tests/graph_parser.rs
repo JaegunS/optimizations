@@ -1,6 +1,6 @@
 // auto-generated: "lalrpop 0.22.1"
 // sha3: 734a716e89c84031bdc11d46c99608f2632ca9a404d204847318837de511d4b7
-use snake::ana::Graph;
+use snake_optimizations::ana::Graph;
 #[allow(unused_extern_crates)]
 extern crate lalrpop_util as __lalrpop_util;
 #[allow(unused_imports)]
@@ -12,7 +12,7 @@ extern crate alloc;
 #[allow(explicit_outlives_requirements, non_snake_case, non_camel_case_types, unused_mut, unused_variables, unused_imports, unused_parens, clippy::needless_lifetimes, clippy::type_complexity, clippy::needless_return, clippy::too_many_arguments, clippy::match_single_binding)]
 mod __parse__Graph {
 
-    use snake::ana::Graph;
+    use snake_optimizations::ana::Graph;
     #[allow(unused_extern_crates)]
     extern crate lalrpop_util as __lalrpop_util;
     #[allow(unused_imports)]
@@ -507,7 +507,7 @@ pub use self::__parse__Graph::GraphParser;
 #[rustfmt::skip]
 mod __intern_token {
     #![allow(unused_imports)]
-    use snake::ana::Graph;
+    use snake_optimizations::ana::Graph;
     #[allow(unused_extern_crates)]
     extern crate lalrpop_util as __lalrpop_util;
     #[allow(unused_imports)]
@@ -581,9 +581,7 @@ fn __action2<'input>(
 fn __action3<'input>(
     input: &'input str, (_, __0, _): (usize, &'input str, usize),
 ) -> Graph<String> {
-    {
-        Graph::new()
-    }
+    { Graph::new() }
 }
 
 #[allow(unused_variables)]

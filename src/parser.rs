@@ -12025,9 +12025,7 @@ fn __action13<'input>(
     (_, _, _): (usize, &'input str, usize), (_, body, _): (usize, SurfExpr, usize),
     (_, r, _): (usize, usize, usize),
 ) -> SurfFunDecl {
-    {
-        FunDecl { name: fun, params, body, loc: SrcLoc::new(l, r) }
-    }
+    { FunDecl { name: fun, params, body, loc: SrcLoc::new(l, r) } }
 }
 
 #[allow(unused_variables)]

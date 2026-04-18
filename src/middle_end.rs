@@ -166,11 +166,7 @@ impl Immediate<VarName> {
         Self::Const(val << 1)
     }
     pub fn boolean(val: bool) -> Self {
-        if val {
-            Self::Const(0b101)
-        } else {
-            Self::Const(0b001)
-        }
+        if val { Self::Const(0b101) } else { Self::Const(0b001) }
     }
 }
 
@@ -945,7 +941,7 @@ impl Lowerer {
         })
     }
 
-    // tagging and untagging
+    /// tagging and untagging
     fn tagging(
         &mut self, imm: &Immediate<VarName>, ty: Type, k: Continuation,
     ) -> BlockBody<VarName, Nil> {
@@ -1017,30 +1013,74 @@ impl Lowerer {
     }
 }
 
-/*
- * A simple abstraction of sets of 64-bit integers for Assertion Removal.
- * */
+/// A simple abstraction of sets of 64-bit integers for Assertion Removal.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum PossibleValues {
-    Any,  // The set of all i64 values, i.e., the value could be anything
-    Even, // The set of all *even* i64 values, i.e., the tagged integers
-    None, // The empty set, i.e., the value is never set
+    /// The set of integers whose last two bits are constrained by [`PossibleBitValues`].
+    ///
+    /// The first element is the second-to-last bit, and the second element is the last bit.
+    Assigned([PossibleBitValues; 2]),
+    /// The empty set, i.e., the value has never been assigned
+    None,
 }
 
 impl PossibleValues {
-    /// The least PossibleValues
+    /// The least [`PossibleValues`]
     fn bottom() -> Self {
         todo!("PossibleValues::bottom")
     }
 
+    /// The least upper bound of two possible values
+    fn lub(self, other: Self) -> Self {
+        todo!("PossibleValues::lub")
+    }
+
     /// mutably update self to be its least upper bound with other
     fn lub_mut(&mut self, other: Self) {
-        todo!("PossibleValues::lub_mut")
+        *self = self.lub(other);
+    }
+
+    /// The greatest [`PossibleValues`]
+    fn top() -> Self {
+        todo!("PossibleValues::top")
+    }
+
+    /// The possible values of an integer that is assigned
+    fn integer() -> Self {
+        todo!("PossibleValues::integer")
+    }
+
+    /// The possible values of a boolean that is assigned
+    fn boolean() -> Self {
+        todo!("PossibleValues::boolean")
+    }
+
+    /// The possible values of an array that is assigned
+    fn array() -> Self {
+        todo!("PossibleValues::array")
     }
 }
 
-// The PossibleValuesEnv is stored at every node
-// The HashMap not containing a name is considered equivalent to that name being mapped to Bottom.
+/// Possible values of a bit that is assigned.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum PossibleBitValues {
+    /// The set of all possible bit values, i.e., the bit could be either 0 or 1
+    Any,
+    /// {0}
+    Zero,
+    /// {1}
+    One,
+}
+
+impl PossibleBitValues {
+    /// The least upper bound of two possible bit values
+    fn lub(self, other: Self) -> Self {
+        todo!("PossibleBitValues::lub")
+    }
+}
+
+/// The [`PossibleValuesEnv`] is stored at every node.
+/// The [`HashMap`] not containing a name is considered equivalent to that name being mapped to Bottom.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PossibleValuesEnv(HashMap<VarName, PossibleValues>);
 
@@ -1054,8 +1094,8 @@ impl PossibleValuesEnv {
         todo!("PossibleValuesEnv::lub_mut")
     }
 
-    // Produces the possible values an immediate may have based on the
-    // current environment information
+    /// Produces the possible values an immediate may have based on the
+    /// current environment information
     fn possible_values(&self, imm: &Immediate<VarName>) -> PossibleValues {
         todo!("PossibleValuesEnv::possible_values")
     }
@@ -1063,7 +1103,7 @@ impl PossibleValuesEnv {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PVRoundSummary {
-    // maps each block to the latest assumptions
+    /// maps each block to the latest assumptions
     block_info: HashMap<BlockName, PossibleValuesEnv>,
 }
 
@@ -1074,10 +1114,10 @@ impl Default for PVRoundSummary {
 }
 
 pub struct AssertionRemover {
-    // The result of the previous round of analysis for blocks
+    /// The result of the previous round of analysis for blocks
     previous: PVRoundSummary,
     current: PVRoundSummary,
-    // The names of the parameters for every block in the program
+    /// The names of the parameters for every block in the program
     block_arg_names: HashMap<BlockName, Vec<VarName>>,
 }
 
@@ -1124,14 +1164,14 @@ impl AssertionRemover {
         Self { previous, current: PVRoundSummary::default(), block_arg_names }
     }
 
-    // Removes assertions that can be proven to always succeed at runtime.
+    /// Removes assertions that can be proven to always succeed at runtime.
     pub fn optimize(&mut self, prog: Program<VarName, Nil>) -> Program<VarName, Nil> {
         let analyzed_prog = self.analyze(prog);
         // println!("Analyzed:\n{}", analyzed_prog);
         self.remove_assertions(analyzed_prog)
     }
 
-    // Performs the possible-values analysis by fixed-point iteration
+    /// Performs the possible-values analysis by fixed-point iteration
     fn analyze(&mut self, prog: Program<VarName, Nil>) -> Program<VarName, PossibleValuesEnv> {
         let mut prog = self.analyze_prog(prog);
         while self.previous != self.current {
@@ -1141,11 +1181,11 @@ impl AssertionRemover {
         prog
     }
 
-    // Fills in dataflow analysis information as well as updating self.current
-
-    // the input is generic in T because we don't need the previous
-    // round's liveness information everywhere, only the summary in
-    // self.previous.
+    /// Fills in dataflow analysis information as well as updating self.current
+    ///
+    /// The input is generic in T because we don't need the previous
+    /// round's liveness information everywhere, only the summary in
+    /// self.previous.
     fn analyze_prog<T>(
         &mut self, prog: Program<VarName, T>,
     ) -> Program<VarName, PossibleValuesEnv> {
@@ -1166,7 +1206,7 @@ impl AssertionRemover {
 
     // Assumes all functions can have arbitrary (Any) inputs.
     fn analyze_fun(&mut self, f: &FunBlock<VarName>) {
-        let args: Vec<PossibleValues> = f.params.iter().map(|_| PossibleValues::Any).collect();
+        let args: Vec<PossibleValues> = f.params.iter().map(|_| PossibleValues::top()).collect();
         self.flow_branch(&f.body.target, &args, &PossibleValuesEnv::bottom());
     }
 
@@ -1219,12 +1259,12 @@ impl AssertionRemover {
         }
     }
 
-    // Computes the flow function for a branch.
-
-    // Since this is a forwards dataflow analysis, this works by
-    // refining the information in the *target* of the branch.
-    //
-    // The arguments provided are the possible values of the arguments to the branch
+    /// Computes the flow function for a branch.
+    ///
+    /// Since this is a forwards dataflow analysis, this works by
+    /// refining the information in the *target* of the branch.
+    ///
+    /// The arguments provided are the possible values of the arguments to the branch
     fn flow_branch(
         &mut self, target: &BlockName, args: &[PossibleValues], pre: &PossibleValuesEnv,
     ) {
@@ -1237,11 +1277,11 @@ impl AssertionRemover {
         targ_info.lub_mut(post);
     }
 
-    // Compute the flow function for the terminator.
-    //
-    // The flow function doesn't directly output anything, instead it
-    // should mutably update any blocks that the terminator may branch
-    // to.
+    /// Compute the flow function for the terminator.
+    ///
+    /// The flow function doesn't directly output anything, instead it
+    /// should mutably update any blocks that the terminator may branch
+    /// to.
     fn flow_terminator(&mut self, t: &Terminator<VarName>, pre: &PossibleValuesEnv) {
         use ssa::Terminator::*;
         match t {
@@ -1261,7 +1301,7 @@ impl AssertionRemover {
         }
     }
 
-    // Compute the flow function for an operation.
+    /// Compute the flow function for an operation.
     fn flow_operation(
         &mut self, dest: &VarName, op: &Operation<VarName>, pre: &PossibleValuesEnv,
     ) -> PossibleValuesEnv {
@@ -1276,9 +1316,9 @@ impl AssertionRemover {
     }
 }
 
-/*
- * Copy propagation
- * */
+/// Copy propagation
+///
+/// Replaces all uses of a variable with the variable it is assigned to.
 pub struct CopyPropagator {
     // var_l = var_r, so all uses of var_l should be replaced with var_r
     vars: HashMap<VarName, VarName>,

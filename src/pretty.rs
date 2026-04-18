@@ -646,31 +646,3 @@ mod impl_ssa {
         }
     }
 }
-
-mod impl_asm {
-    use super::*;
-    use crate::asm::*;
-
-    impl fmt::Display for Reg {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                Reg::Rax => write!(f, "rax"),
-                Reg::Rbx => write!(f, "rbx"),
-                Reg::Rdx => write!(f, "rdx"),
-                Reg::Rcx => write!(f, "rcx"),
-                Reg::Rsi => write!(f, "rsi"),
-                Reg::Rdi => write!(f, "rdi"),
-                Reg::Rsp => write!(f, "rsp"),
-                Reg::Rbp => write!(f, "rbp"),
-                Reg::R8 => write!(f, "r8"),
-                Reg::R9 => write!(f, "r9"),
-                Reg::R10 => write!(f, "r10"),
-                Reg::R11 => write!(f, "r11"),
-                Reg::R12 => write!(f, "r12"),
-                Reg::R13 => write!(f, "r13"),
-                Reg::R14 => write!(f, "r14"),
-                Reg::R15 => write!(f, "r15"),
-            }
-        }
-    }
-}

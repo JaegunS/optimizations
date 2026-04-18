@@ -1,4 +1,4 @@
-pub use snake::ana::*;
+pub use snake_optimizations::ana::*;
 use std::collections::{HashMap, HashSet};
 
 pub fn valid_coloring(
@@ -13,7 +13,10 @@ pub fn valid_coloring(
                 let vars = occ.get_mut();
                 for var2 in vars.iter() {
                     if rig.contains_edge(var, var2) {
-                        return Err(format!("Your graph coloring algorithm assigns the interfering vertices {} and {} to the same location: {}", var, var2, loc));
+                        return Err(format!(
+                            "Your graph coloring algorithm assigns the interfering vertices {} and {} to the same location: {}",
+                            var, var2, loc
+                        ));
                     }
                 }
             }

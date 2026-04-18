@@ -14,7 +14,7 @@ pub enum SnakeErr {
     IndexOutOfBounds = 5,
 }
 
-#[export_name = "\x01snake_error"]
+#[export_name = "\u{1}snake_error"]
 pub extern "C" fn snake_error(ecode: SnakeErr, v: SnakeValue) -> SnakeValue {
     match ecode {
         SnakeErr::ArithmeticOverflow => eprintln!("arithmetic operation overflowed"),

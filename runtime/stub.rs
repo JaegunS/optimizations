@@ -11,13 +11,13 @@ static mut HEAP_PTR: *mut u64 = unsafe { HEAP_START.as_mut_ptr() };
 
 /* --------------------------- External Functions --------------------------- */
 
-#[export_name = "\x01print"]
+#[export_name = "\u{1}print"]
 extern "sysv64" fn print(val: SnakeValue) -> SnakeValue {
     println!("{}", sprint_snake_val(val));
     val
 }
 
-#[export_name = "\x01big_fun_nine"]
+#[export_name = "\u{1}big_fun_nine"]
 extern "sysv64" fn big_fun_nine(
     x1: SnakeValue, x2: SnakeValue, x3: SnakeValue, x4: SnakeValue, x5: SnakeValue, x6: SnakeValue,
     x7: SnakeValue, x8: SnakeValue, x9: SnakeValue,
@@ -52,7 +52,7 @@ extern "sysv64" fn big_fun_nine(
 /* Implement the following function for array allocation.
  * Again, feel free to change the function signature if needed.
 **/
-#[export_name = "\x01snake_new_array"]
+#[export_name = "\u{1}snake_new_array"]
 extern "sysv64" fn snake_new_array(size: u64) -> *mut u64 {
     let arr_ptr = unsafe { HEAP_PTR as u64 };
     unsafe {
@@ -89,7 +89,7 @@ fn parse_snake_basic_val(s: &str) -> SnakeValue {
 
 #[link(name = "compiled_code", kind = "static")]
 extern "sysv64" {
-    #[link_name = "\x01entry"]
+    #[link_name = "\u{1}entry"]
     fn entry(param: SnakeValue) -> SnakeValue;
 }
 

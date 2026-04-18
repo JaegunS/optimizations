@@ -158,11 +158,7 @@ impl UnusedRemover {
             .enumerate()
             .map(
                 |(i, param)| {
-                    if live.contains(&param) {
-                        Either::Right(param)
-                    } else {
-                        Either::Left(i)
-                    }
+                    if live.contains(&param) { Either::Right(param) } else { Either::Left(i) }
                 },
             )
             .partition_map(|x| x)
@@ -694,7 +690,7 @@ impl Emitter {
             }
             self.emit(Instr::Mov(MovArgs::ToReg(Reg::Rsi, Arg64::Reg(Reg::Rax))));
             self.emit(Instr::Sub(BinArgs::ToReg(Reg::Rsp, Arg32::Signed(8))));
-            self.emit(Instr::Call("snake_error".to_string()));
+            self.emit(Instr::Call(JmpArgs::Label("snake_error".to_string())));
         }
 
         // Build up the environment for the blocks
@@ -765,7 +761,7 @@ impl Emitter {
         self.emit_simultaneous_move(dests, srcs);
 
         // finally, jump to the target
-        self.emit(Instr::Jmp(f.body.target.to_string()));
+        self.emit(Instr::Jmp(JmpArgs::Label(f.body.target.to_string())));
     }
 
     fn emit_block(&mut self, block: &BasicBlock<VarName, LiveSet>, block_env: BlockEnv) {
@@ -910,7 +906,7 @@ impl Emitter {
                     block_env[&branch.target].clone(),
                     branch.args.iter().map(|a| self.resolve_imm(a)).collect(),
                 );
-                self.emit(Instr::Jmp(branch.target.to_string()));
+                self.emit(Instr::Jmp(JmpArgs::Label(branch.target.to_string())));
             }
             Terminator::ConditionalBranch { cond, thn, els } => {
                 // temporary register rax
@@ -918,7 +914,7 @@ impl Emitter {
                 // cmp rax, 0 (false)
                 self.emit(Instr::Cmp(BinArgs::ToReg(Reg::Rax, Arg32::Signed(0))));
                 self.emit(Instr::JCC(ConditionCode::NE, thn.to_string()));
-                self.emit(Instr::Jmp(els.to_string()));
+                self.emit(Instr::Jmp(JmpArgs::Label(els.to_string())));
             }
         }
     }
@@ -1142,7 +1138,7 @@ impl Emitter {
         // 3. Save the locals
         self.emit(Instr::Sub(BinArgs::ToReg(Reg::Rsp, Arg32::Signed(8 * frame_size))));
         // 4. call
-        self.emit(Instr::Call(fun.to_string()));
+        self.emit(Instr::Call(JmpArgs::Label(fun.to_string())));
         // 5. Restore rsp
         self.emit(Instr::Add(BinArgs::ToReg(Reg::Rsp, Arg32::Signed(8 * frame_size))));
         // 6. mov result to destination

@@ -30,7 +30,6 @@ block entry#0(z%0):
       tagged%17 = eq_0%15 == eq_1%16
       shifted%18 = tagged%17 << 2
       cond%13 = shifted%18 | 1
-      assertBool(cond%13)
       flag%14 = cond%13 >> 2
       cbr flag%14 thn#3 els#4
     mult_x_0%11 = y%3

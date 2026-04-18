@@ -1,15 +1,15 @@
 use clap::{ArgAction, Parser};
-use snake::asm::{instrs_to_string, Reg};
-use snake::backend::{
-    ConflictAnalysis, Emitter, LivenessAnalyzer, RegisterAllocator, UnusedRemover,
+use snake_optimizations::{
+    asm::{Reg, instrs_to_string},
+    backend::{ConflictAnalysis, Emitter, LivenessAnalyzer, RegisterAllocator, UnusedRemover},
+    cli::*,
+    frontend::Resolver,
+    interp,
+    middle_end::{AssertionRemover, CopyPropagator, Lowerer},
+    parser::ProgParser,
+    runner::*,
+    txt::FileInfo,
 };
-use snake::cli::*;
-use snake::frontend::Resolver;
-use snake::interp;
-use snake::middle_end::{AssertionRemover, CopyPropagator, Lowerer};
-use snake::parser::ProgParser;
-use snake::runner::*;
-use snake::txt::FileInfo;
 use std::path::{Path, PathBuf};
 
 #[derive(Parser, Debug)]

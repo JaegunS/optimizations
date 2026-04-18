@@ -129,7 +129,9 @@ mod graph_parser;
 mod public_optimizations {
     use super::*;
     use graph_parser::*;
-    use snake::{backend::*, frontend::*, middle_end::*, parser::*, runner::*, txt::*};
+    use snake_optimizations::{
+        backend::*, frontend::*, middle_end::*, parser::*, runner::*, txt::*,
+    };
 
     mod assertion_removal {
         use super::*;
@@ -249,7 +251,7 @@ mod public_optimizations {
             regs: &'static str, allow_spills: bool, src_file: impl Into<PathBuf>,
             expected_graph_file: impl Into<PathBuf>,
         ) -> Result<(), String> {
-            use snake::cli::RegisterSelection;
+            use snake_optimizations::cli::RegisterSelection;
             use std::str::FromStr;
             let inp =
                 read_file(&src_file.into()).map_err(|e| format!("Error reading file: {}", e))?;
@@ -353,7 +355,7 @@ mod public_optimizations {
 
 /* ----------------------- Test Implementation Details ---------------------- */
 
-use snake::{interp, runner};
+use snake_optimizations::{interp, runner};
 use std::path::{Path, PathBuf};
 
 fn test_example_file(

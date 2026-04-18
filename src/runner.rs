@@ -105,7 +105,7 @@ pub fn link(
         .arg(lib_fname)
         .arg(&obj_fname)
         .output()
-        .map_err(|e| (format!("ar err: {}", e)))?;
+        .map_err(|e| format!("ar err: {}", e))?;
     if !ar_out.status.success() {
         return Err(format!(
             "Failure in ar call:\n{}\n{}",
@@ -127,7 +127,7 @@ pub fn link(
             .arg("-o")
             .arg(&exe_fname)
             .output()
-            .map_err(|e| (format!("rustc err: {}", e)))?
+            .map_err(|e| format!("rustc err: {}", e))?
     } else {
         Command::new("rustc")
             .arg(runtime_file)
@@ -136,7 +136,7 @@ pub fn link(
             .arg("-o")
             .arg(&exe_fname)
             .output()
-            .map_err(|e| (format!("rustc err: {}", e)))?
+            .map_err(|e| format!("rustc err: {}", e))?
     };
     if !rustc_out.status.success() {
         Err(format!(
@@ -161,18 +161,18 @@ where
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| (format!("{}", e)))?;
+        .map_err(|e| format!("{}", e))?;
     let compiled_out =
         BufReader::new(child.stdout.take().expect("Failed to capture compiled code's stdout"));
     let compiled_err =
         BufReader::new(child.stderr.take().expect("Failed to capture compiled code's stderr"));
 
     for line in compiled_out.lines() {
-        let line = line.map_err(|e| (format!("{}", e)))?;
-        writeln!(out, "{}", line).map_err(|e| (format!("I/O error: {}", e)))?;
+        let line = line.map_err(|e| format!("{}", e))?;
+        writeln!(out, "{}", line).map_err(|e| format!("I/O error: {}", e))?;
     }
 
-    let status = child.wait().map_err(|e| (format!("Error waiting for child process {}", e)))?;
+    let status = child.wait().map_err(|e| format!("Error waiting for child process {}", e))?;
     if !status.success() {
         let mut stderr = String::new();
         for line in compiled_err.lines() {

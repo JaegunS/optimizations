@@ -1,6 +1,6 @@
 def main(z):
 let z = z[0] in
-  def mult(x,y):
+  def mult(x, y):
     def mult_x(i, acc):
       if i == 0:
         acc

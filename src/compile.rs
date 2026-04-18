@@ -41,7 +41,7 @@ pub fn middle_end(
 
 /// Backend, code generation
 pub fn backend(_lowerer: Lowerer, ssa: Program<VarName, Nil>) -> String {
-    use crate::asm::{instrs_to_string, Reg};
+    use crate::asm::{Reg, instrs_to_string};
     use crate::backend::{
         ConflictAnalysis, Emitter, LivenessAnalyzer, RegisterAllocator, UnusedRemover,
     };
