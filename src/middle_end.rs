@@ -116,7 +116,7 @@ impl Lifter {
 
     fn lift_prog(&mut self, prog: &BoundProg) {
         let Prog { externs: _, name, param: _, body, loc: _ } = prog;
-        self.lift_expr(body, &name, true);
+        self.lift_expr(body, name, true);
     }
 
     fn lift_expr(&mut self, e: &BoundExpr, site: &FunName, tail_position: bool) {
@@ -208,7 +208,7 @@ impl Lowerer {
         // lower the body
         let body = self.lower_expr_kont(
             body,
-            &vec![param.clone()],
+            std::slice::from_ref(&param),
             &Substitution::new(),
             Continuation::Return,
         );
@@ -628,9 +628,7 @@ impl Lowerer {
             }
             Expr::Let { bindings, body, loc: _ } => {
                 // collect the live variables up to this point
-                let mut live = live
-                    .to_owned()
-                    .into_iter()
+                let mut live = live.iter().cloned()
                     .chain(bindings.iter().map(|Binding { var: (var, _), .. }| var.clone()))
                     .collect::<Vec<_>>();
 
@@ -640,13 +638,13 @@ impl Lowerer {
                 // reversed, as usual
                 bindings.into_iter().rev().fold(block, |block, Binding { var: (var, _), expr }| {
                     live.pop();
-                    let expr = self.lower_expr_kont(
+                    
+                    self.lower_expr_kont(
                         expr,
                         &live,
                         subst,
                         Continuation::Block(var.clone(), block),
-                    );
-                    expr
+                    )
                 })
             }
             Expr::If { cond, thn, els, loc: _ } => {
@@ -671,7 +669,7 @@ impl Lowerer {
                 );
                 let cond_branch = Box::new(self.lower_expr_kont(
                     *cond,
-                    &live,
+                    live,
                     subst,
                     Continuation::Block(
                         cond_var.clone(),
@@ -765,9 +763,7 @@ impl Lowerer {
                 let blocks: Vec<_> = decls
                     .into_iter()
                     .filter_map(|FunDecl { name: fun, params, body, loc: _ }| {
-                        let live = live
-                            .to_owned()
-                            .into_iter()
+                        let live = live.iter().cloned()
                             .chain(params.iter().map(|(p, _)| p.clone()))
                             .collect::<Vec<_>>();
                         let block = self.fun_as_block.get(&fun).cloned().expect("fun not found");
@@ -807,7 +803,7 @@ impl Lowerer {
                                     args: funblock_params
                                         .clone()
                                         .into_iter()
-                                        .map(|p| Immediate::Var(p))
+                                        .map(Immediate::Var)
                                         .collect(),
                                 },
                             };
@@ -850,7 +846,7 @@ impl Lowerer {
                 let lower_call = |lowerer: &mut Lowerer, block: BlockBody<VarName, Nil>| {
                     // backwards, so we need to reverse the arguments
                     args.into_iter().zip(args_var).rev().fold(block, |block, (arg, var)| {
-                        lowerer.lower_expr_kont(arg, &live, subst, Continuation::Block(var, block))
+                        lowerer.lower_expr_kont(arg, live, subst, Continuation::Block(var, block))
                     })
                 };
                 if fun.is_unmangled() {
@@ -877,7 +873,7 @@ impl Lowerer {
                             .map(|v| subst.run(v));
                         // the arguments are the ambient live variables and the arguments combined
                         let args_imm =
-                            ambient.map(|v| Immediate::Var(v)).chain(args_imm).collect::<Vec<_>>();
+                            ambient.map(Immediate::Var).chain(args_imm).collect::<Vec<_>>();
 
                         match k {
                             Continuation::Return => lower_call(
@@ -922,7 +918,7 @@ impl Lowerer {
     fn assert_type_multi(
         ty: Type, of: &[Immediate<VarName>], next: BlockBody<VarName, Nil>,
     ) -> BlockBody<VarName, Nil> {
-        of.into_iter().fold(next, |block, imm| BlockBody::AssertType {
+        of.iter().fold(next, |block, imm| BlockBody::AssertType {
             ty,
             arg: imm.to_owned(),
             next: Box::new(block),
@@ -1027,12 +1023,19 @@ enum PossibleValues {
 impl PossibleValues {
     /// The least [`PossibleValues`]
     fn bottom() -> Self {
-        todo!("PossibleValues::bottom")
+        PossibleValues::None
     }
 
     /// The least upper bound of two possible values
     fn lub(self, other: Self) -> Self {
-        todo!("PossibleValues::lub")
+        match (self, other) {
+            (PossibleValues::None, PossibleValues::None) => {PossibleValues::None},
+            (PossibleValues::None, PossibleValues::Assigned(..)) => {other},
+            (PossibleValues::Assigned(..), PossibleValues::None) => {self},
+            (PossibleValues::Assigned([b1, b2]), PossibleValues::Assigned([c1, c2])) => {
+                PossibleValues::Assigned([b1.lub(c1), b2.lub(c2)])
+            }
+        }
     }
 
     /// mutably update self to be its least upper bound with other
@@ -1042,22 +1045,22 @@ impl PossibleValues {
 
     /// The greatest [`PossibleValues`]
     fn top() -> Self {
-        todo!("PossibleValues::top")
+        PossibleValues::Assigned([PossibleBitValues::Any; 2])
     }
 
     /// The possible values of an integer that is assigned
     fn integer() -> Self {
-        todo!("PossibleValues::integer")
+        PossibleValues::Assigned([PossibleBitValues::Any, PossibleBitValues::Zero])
     }
 
     /// The possible values of a boolean that is assigned
     fn boolean() -> Self {
-        todo!("PossibleValues::boolean")
+        PossibleValues::Assigned([PossibleBitValues::Zero, PossibleBitValues::One])
     }
 
     /// The possible values of an array that is assigned
     fn array() -> Self {
-        todo!("PossibleValues::array")
+        PossibleValues::Assigned([PossibleBitValues::One, PossibleBitValues::One])
     }
 }
 
@@ -1075,7 +1078,7 @@ enum PossibleBitValues {
 impl PossibleBitValues {
     /// The least upper bound of two possible bit values
     fn lub(self, other: Self) -> Self {
-        todo!("PossibleBitValues::lub")
+        if self == other {self} else {PossibleBitValues::Any}
     }
 }
 
@@ -1086,32 +1089,38 @@ pub struct PossibleValuesEnv(HashMap<VarName, PossibleValues>);
 
 impl PossibleValuesEnv {
     fn bottom() -> Self {
-        todo!("PossibleValuesEnv::bottom")
+        Self(HashMap::new())
     }
 
     /// mutably update self to be its least upper bound with other
     fn lub_mut(&mut self, other: Self) {
-        todo!("PossibleValuesEnv::lub_mut")
+        self.0.iter_mut().for_each(|value| match other.0.get(value.0) {None => {} Some(o) => {value.1.lub_mut(o.to_owned())}})
     }
 
     /// Produces the possible values an immediate may have based on the
     /// current environment information
     fn possible_values(&self, imm: &Immediate<VarName>) -> PossibleValues {
-        todo!("PossibleValuesEnv::possible_values")
+        match imm.to_owned() {
+            Immediate::Const(i) => {
+                PossibleValues::Assigned([if (i & 0b10) == 0b10 {PossibleBitValues::One} else {PossibleBitValues::Zero}, if (i & 0b1) == 0b1 {PossibleBitValues::One} else {PossibleBitValues::Zero}])
+            }
+            Immediate::Var(v) => {
+                match self.0.get(&v) {
+                    None => {PossibleValues::bottom()}
+                    Some(value) => {*value}
+                }
+            }
+        }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Default)]
 struct PVRoundSummary {
     /// maps each block to the latest assumptions
     block_info: HashMap<BlockName, PossibleValuesEnv>,
 }
 
-impl Default for PVRoundSummary {
-    fn default() -> Self {
-        PVRoundSummary { block_info: HashMap::new() }
-    }
-}
 
 pub struct AssertionRemover {
     /// The result of the previous round of analysis for blocks
@@ -1127,7 +1136,7 @@ impl AssertionRemover {
             p: &Program<VarName, T>, blocks: &mut HashMap<BlockName, Vec<VarName>>,
         ) {
             for block in p.blocks.iter() {
-                find_names_basic_block(&block, blocks);
+                find_names_basic_block(block, blocks);
             }
         }
         fn find_names_block_body<T>(
@@ -1143,7 +1152,7 @@ impl AssertionRemover {
                 | Store { next, .. } => find_names_block_body(next, blocks),
                 SubBlocks { blocks: sub_blocks, next, .. } => {
                     for block in sub_blocks.iter() {
-                        find_names_basic_block(&block, blocks);
+                        find_names_basic_block(block, blocks);
                     }
                     find_names_block_body(next, blocks)
                 }
@@ -1161,7 +1170,7 @@ impl AssertionRemover {
         for (l, _) in block_arg_names.iter() {
             previous.block_info.insert(l.clone(), PossibleValuesEnv::bottom());
         }
-        Self { previous, current: PVRoundSummary::default(), block_arg_names }
+        Self { previous, current: PVRoundSummary::default(), block_arg_names, }
     }
 
     /// Removes assertions that can be proven to always succeed at runtime.
@@ -1243,18 +1252,45 @@ impl AssertionRemover {
                 next: Box::new(self.analyze_block_body(*next, pre)),
                 ana: pre.clone(),
             },
-
             AssertType { ty, arg, next, .. } => {
-                todo!("implement analysis for AssertType")
+                let mut post = pre.clone();
+                match arg.clone() {
+                    Immediate::Const(_) => {},
+                    Immediate::Var(v) => {
+                        post.0.insert(
+                            v,
+                            match ty {
+                                Type::Array => PossibleValues::array(),
+                                Type::Bool => PossibleValues::boolean(),
+                                Type::Int => PossibleValues::integer()
+                            }
+                        );
+                    }
+                };
+                AssertType {
+                    ty,
+                    arg,
+                    next: Box::new(self.analyze_block_body(*next, pre)),
+                    ana: post
+                }
             }
-            AssertLength { len, next, .. } => {
-                todo!("implement AssertLength analysis")
-            }
-            AssertInBounds { bound, arg, next, .. } => {
-                todo!("implement AssertInBounds analysis")
-            }
-            Store { addr, offset, val, next, .. } => {
-                todo!("implement Store analysis")
+            AssertLength { len, next, .. } => AssertLength {
+                len,
+                next: Box::new(self.analyze_block_body(*next, pre)),
+                ana: pre.clone(),
+            },
+            AssertInBounds { bound, arg, next, .. } => AssertInBounds {
+                bound,
+                arg, 
+                next: Box::new(self.analyze_block_body(*next, pre)), 
+                ana: pre.clone(),
+            },
+            Store { addr, offset, val, next, .. } => Store {
+                addr,
+                offset,
+                val,
+                next: Box::new(self.analyze_block_body(*next, pre)),
+                ana: pre.clone(),
             }
         }
     }
@@ -1294,8 +1330,8 @@ impl AssertionRemover {
             ConditionalBranch { cond, thn, els } => match pre.possible_values(cond) {
                 PossibleValues::None => {}
                 _ => {
-                    self.flow_branch(&thn, &[], pre);
-                    self.flow_branch(&els, &[], pre);
+                    self.flow_branch(thn, &[], pre);
+                    self.flow_branch(els, &[], pre);
                 }
             },
         }
@@ -1305,14 +1341,170 @@ impl AssertionRemover {
     fn flow_operation(
         &mut self, dest: &VarName, op: &Operation<VarName>, pre: &PossibleValuesEnv,
     ) -> PossibleValuesEnv {
-        todo!("implement flow_operation")
+        let mut post = pre.to_owned();
+        post.0.insert(
+            dest.to_owned(), 
+            match op {
+                Operation::Immediate(immediate) => {
+                    pre.possible_values(immediate)
+                },
+                Operation::Prim1(prim1, immediate) => {
+                    match pre.possible_values(immediate) { 
+                        PossibleValues::None => PossibleValues::None,
+                        PossibleValues::Assigned([b1, b2]) => match prim1 {
+                            Prim1::BitNot => {
+                                PossibleValues::Assigned([
+                                    match b1 {
+                                        PossibleBitValues::Any => PossibleBitValues::Any,
+                                        PossibleBitValues::One => PossibleBitValues::Zero,
+                                        PossibleBitValues::Zero => PossibleBitValues::One
+                                    },
+                                    match b2 {
+                                        PossibleBitValues::Any => PossibleBitValues::Any,
+                                        PossibleBitValues::One => PossibleBitValues::Zero,
+                                        PossibleBitValues::Zero => PossibleBitValues::One
+                                    }
+                                ])
+                            },
+                            Prim1::BitSal(i) | Prim1::BitShl(i) => {
+                                if *i == 0 {pre.possible_values(immediate)} else {PossibleValues::Assigned([b2, PossibleBitValues::Zero])}
+                            },
+                            Prim1::BitSar(i) | Prim1::BitShr(i) => {
+                                if *i == 0 {pre.possible_values(immediate)} else {PossibleValues::Assigned([PossibleBitValues::Any, b1])}
+                            }
+                    }
+                    }
+                },
+                Operation::Prim2(prim2, immediate, immediate1) => {
+                    match (pre.possible_values(immediate), pre.possible_values(immediate1)) {
+                        (PossibleValues::None, _) | (_, PossibleValues::None) => PossibleValues::None,
+                        (PossibleValues::Assigned([b1, b2]), PossibleValues::Assigned([c1, c2])) => {
+                            match prim2 {
+                                Prim2::Add | Prim2::Sub | Prim2::Mul => {
+                                    match (b2, c2) {
+                                        (PossibleBitValues::Zero, PossibleBitValues::Zero) => {
+                                            PossibleValues::integer()
+                                        },
+                                        (_, _) => PossibleValues::None
+                                    }
+                                }
+                                Prim2::BitAnd => {
+                                    PossibleValues::Assigned([
+                                        match (b1, c1) {
+                                            (PossibleBitValues::Zero, _) | (_, PossibleBitValues::Zero) => PossibleBitValues::Zero,
+                                            (PossibleBitValues::One, _) => c1,
+                                            (_, PossibleBitValues::One) => b1,
+                                            (PossibleBitValues::Any, PossibleBitValues::Any) => PossibleBitValues::Any,
+                                        },
+                                        match (b2, c2) {
+                                            (PossibleBitValues::Zero, _) | (_, PossibleBitValues::Zero) => PossibleBitValues::Zero,
+                                            (PossibleBitValues::One, _) => c2,
+                                            (_, PossibleBitValues::One) => b2,
+                                            (PossibleBitValues::Any, PossibleBitValues::Any) => PossibleBitValues::Any,
+                                        }
+                                    ])
+                                },
+                                Prim2::BitOr => {
+                                    PossibleValues::Assigned([
+                                        match (b1, c1) {
+                                            (PossibleBitValues::One, _) | (_, PossibleBitValues::One) => PossibleBitValues::One,
+                                            (PossibleBitValues::Zero, _) => c1,
+                                            (_, PossibleBitValues::Zero) => b1,
+                                            (PossibleBitValues::Any, PossibleBitValues::Any) => PossibleBitValues::Any,
+                                        },
+                                        match (b2, c2) {
+                                            (PossibleBitValues::One, _) | (_, PossibleBitValues::One) => PossibleBitValues::One,
+                                            (PossibleBitValues::Zero, _) => c2,
+                                            (_, PossibleBitValues::Zero) => b2,
+                                            (PossibleBitValues::Any, PossibleBitValues::Any) => PossibleBitValues::Any,
+                                        }
+                                    ])
+                                },
+                                Prim2::BitXor => {
+                                    PossibleValues::Assigned([
+                                        match (b1, c1) {
+                                            (PossibleBitValues::Any, _) | (_, PossibleBitValues::Any) => PossibleBitValues::Any,
+                                            (PossibleBitValues::Zero, PossibleBitValues::One) | (PossibleBitValues::One, PossibleBitValues::Zero) => PossibleBitValues::One,
+                                            (_, _) => PossibleBitValues::Zero,
+                                        },
+                                        match (b2, c2) {
+                                            (PossibleBitValues::Any, _) | (_, PossibleBitValues::Any) => PossibleBitValues::Any,
+                                            (PossibleBitValues::Zero, PossibleBitValues::One) | (PossibleBitValues::One, PossibleBitValues::Zero) => PossibleBitValues::One,
+                                            (_, _) => PossibleBitValues::Zero,
+                                        }
+                                    ])
+                                },
+                                _ => PossibleValues::boolean()
+                            }
+                        }
+                    }
+                },
+                Operation::Call {..} | Operation::Load {..} => PossibleValues::top(),
+                Operation::AllocateArray {..} => PossibleValues::array(),
+            }
+        );
+        post
     }
 
     /// Removes AssertInt assertions that are guaranteed by the dataflow analysis to succeed
     fn remove_assertions(
-        &self, prog: Program<VarName, PossibleValuesEnv>,
+        &mut self, prog: Program<VarName, PossibleValuesEnv>,
     ) -> Program<VarName, Nil> {
-        todo!("implement remove_assertions")
+        Program {
+            blocks: prog.blocks.into_iter().map(|b| self.remove_basic_block_assertions(b)).collect(),
+            externs: prog.externs,
+            funs: prog.funs,
+        }
+    }
+
+    fn remove_basic_block_assertions(
+        &mut self, b: BasicBlock<VarName, PossibleValuesEnv>,
+    ) -> BasicBlock<VarName, Nil> {
+        let body = self.remove_block_body_assertions(b.body);
+        BasicBlock { label: b.label, params: b.params, ana: Nil, body }
+    }
+
+    fn remove_block_body_assertions(
+        &mut self, b: BlockBody<VarName, PossibleValuesEnv>,
+    ) -> BlockBody<VarName, Nil> {
+        match b {
+            BlockBody::Terminator(t, _) => BlockBody::Terminator(t, Nil),
+            BlockBody::Operation { dest, op, next, ana } => {
+                BlockBody::Operation { dest, op, next: self.next_removed_body(next, ana), ana: Nil }
+            },
+            BlockBody::SubBlocks { blocks, next, ana } => {
+                BlockBody::SubBlocks { blocks: blocks.into_iter().map(|basic| self.remove_basic_block_assertions(basic)).collect(), next: self.next_removed_body(next, ana), ana: Nil }
+            },
+            BlockBody::AssertType { ty, arg, next, ana } => {
+                BlockBody::AssertType { ty, arg, next: self.next_removed_body(next, ana), ana: Nil }
+            },
+            BlockBody::AssertLength { len, next, ana } => {
+                BlockBody::AssertLength { len, next: self.next_removed_body(next, ana), ana: Nil }
+            },
+            BlockBody::AssertInBounds { bound, arg, next, ana } => {
+                BlockBody::AssertInBounds { bound, arg, next: self.next_removed_body(next, ana), ana: Nil }
+            },
+            BlockBody::Store { addr, offset, val, next, ana } => {
+                BlockBody::Store { addr, offset, val, next: self.next_removed_body(next, ana), ana: Nil }
+            },
+        }
+    }
+
+    fn next_removed_body(
+        &mut self, next: Box<BlockBody<VarName, PossibleValuesEnv>>, ana: PossibleValuesEnv
+    ) -> Box<BlockBody<VarName, Nil>> {
+        let n;
+        match *next.clone() {
+            BlockBody::AssertType {next: a_next, ana: a_ana, ..} => {
+                if ana == a_ana {
+                    n = Box::new(self.remove_block_body_assertions(*a_next));
+                } else {
+                    n = Box::new(self.remove_block_body_assertions(*next));
+                }
+            }
+            _ => {n = Box::new(self.remove_block_body_assertions(*next));}
+        };
+        n
     }
 }
 
@@ -1330,11 +1522,7 @@ impl CopyPropagator {
     }
 
     pub fn query(&self, var: &VarName) -> Option<VarName> {
-        if let Some(subst) = self.vars.get(var) {
-            Some(self.query(subst).unwrap_or_else(|| subst.clone()))
-        } else {
-            None
-        }
+        self.vars.get(var).map(|subst| self.query(subst).unwrap_or_else(|| subst.clone()))
     }
 
     pub fn run(&mut self, mut prog: Program<VarName, Nil>) -> Program<VarName, Nil> {
@@ -1431,5 +1619,11 @@ impl CopyPropagator {
             Immediate::Var(var) => Immediate::Var(self.query(&var).unwrap_or(var)),
             _ => imm,
         }
+    }
+}
+
+impl Default for CopyPropagator {
+    fn default() -> Self {
+        Self::new()
     }
 }
