@@ -1380,10 +1380,22 @@ impl AssertionRemover {
                         (PossibleValues::None, _) | (_, PossibleValues::None) => PossibleValues::None,
                         (PossibleValues::Assigned([b1, b2]), PossibleValues::Assigned([c1, c2])) => {
                             match prim2 {
-                                Prim2::Add | Prim2::Sub | Prim2::Mul => {
+                                Prim2::Add | Prim2::Sub => {
                                     match (b2, c2) {
                                         (PossibleBitValues::Zero, PossibleBitValues::Zero) => {
                                             PossibleValues::integer()
+                                        },
+                                        (_, _) => PossibleValues::None
+                                    }
+                                }
+                                Prim2::Mul => {
+                                    match (b2, c2) {
+                                        (PossibleBitValues::Zero, PossibleBitValues::Zero) => {
+                                            match (b1, c1) {
+                                                (PossibleBitValues::Any, _) | (_, PossibleBitValues::Any) => PossibleValues::Assigned([PossibleBitValues::Any, PossibleBitValues::Zero]),
+                                                (PossibleBitValues::Zero, PossibleBitValues::Zero) | (PossibleBitValues::One, PossibleBitValues::One) => PossibleValues::Assigned([PossibleBitValues::Zero, PossibleBitValues::Zero]),
+                                                (PossibleBitValues::Zero, PossibleBitValues::One) | (PossibleBitValues::One, PossibleBitValues::Zero) => PossibleValues::Assigned([PossibleBitValues::One, PossibleBitValues::Zero]),
+                                            }
                                         },
                                         (_, _) => PossibleValues::None
                                     }
