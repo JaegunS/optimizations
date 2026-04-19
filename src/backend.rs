@@ -76,7 +76,121 @@ impl LivenessAnalyzer {
     /// also sets the information in self.current for the result of
     /// this round.
     fn analyze_prog<T>(&mut self, prog: Program<VarName, T>) -> Program<VarName, LiveSet> {
-        todo!("LivenessAnalyzer::analyze_prog")
+        let Program {externs, funs, blocks } = prog;
+
+        let blocks = blocks.into_iter().map(|b| self.analyze_block(b)).collect();
+        Program { externs, funs, blocks }
+    }
+
+    fn analyze_block<T>(&mut self, b: BasicBlock<VarName, T>) -> BasicBlock<VarName, LiveSet> {
+        let BasicBlock { label, params, body, .. } = b;
+        let (body, live_in) = self.analyze_body(body);
+        // store LIVE(f.body) - f.args in `current`, so branch terminators can
+        // just union in `previous[target]` directly
+        let stripped: HashSet<VarName> =
+            live_in.iter().filter(|v| !params.contains(v)).cloned().collect();
+        self.current.insert(label.clone(), stripped);
+        BasicBlock { label, params, body, ana: live_in }
+    }
+
+    fn analyze_body<T>(
+        &mut self, b: BlockBody<VarName, T>,
+    ) -> (BlockBody<VarName, LiveSet>, LiveSet) {
+        match b {
+            BlockBody::Terminator(t, _) => {
+                let mut live = LiveSet::new();
+                match &t {
+                    // LIVE(ret imm) = LIVE(imm)
+                    Terminator::Return(imm) => add_imm(&mut live, imm),
+                    // LIVE(br f(imm,...)) = (LIVE(f.body) - f.args) U LIVE(imm1) U ...
+                    // `previous[target]` already stores LIVE(f.body) - f.args
+                    Terminator::Branch(Branch { target, args }) => {
+                        for a in args {
+                            add_imm(&mut live, a);
+                        }
+                        if let Some(prev) = self.previous.get(target) {
+                            live.extend(prev.iter().cloned());
+                        }
+                    }
+                    // LIVE(cbr imm: f else: g) = LIVE(imm) U LIVE(f.body) U LIVE(g.body)
+                    Terminator::ConditionalBranch { cond, thn, els } => {
+                        add_imm(&mut live, cond);
+                        if let Some(prev) = self.previous.get(thn) {
+                            live.extend(prev.iter().cloned());
+                        }
+                        if let Some(prev) = self.previous.get(els) {
+                            live.extend(prev.iter().cloned());
+                        }
+                    }
+                }
+                (BlockBody::Terminator(t, live.clone()), live)
+            }
+            // LIVE(x = op in b) = (LIVE(b) - x) U LIVE(op)
+            BlockBody::Operation { dest, op, next, .. } => {
+                let (next, mut live) = self.analyze_body(*next);
+                live.remove(&dest);
+                match &op {
+                    Operation::Immediate(i) | Operation::Prim1(_, i) => add_imm(&mut live, i),
+                    Operation::Prim2(_, a, b) => {
+                        add_imm(&mut live, a);
+                        add_imm(&mut live, b);
+                    }
+                    Operation::Call { args, .. } => {
+                        for a in args {
+                            add_imm(&mut live, a);
+                        }
+                    }
+                    Operation::AllocateArray { len } => add_imm(&mut live, len),
+                    Operation::Load { addr, offset } => {
+                        add_imm(&mut live, addr);
+                        add_imm(&mut live, offset);
+                    }
+                }
+                let ana = live.clone();
+                (BlockBody::Operation { dest, op, next: Box::new(next), ana }, live)
+            }
+            BlockBody::SubBlocks { blocks, next, .. } => {
+                let (next, live_after) = self.analyze_body(*next);
+                let blocks =
+                    blocks.into_iter().map(|b| self.analyze_block(b)).collect();
+                let ana = live_after.clone();
+                (BlockBody::SubBlocks { blocks, next: Box::new(next), ana }, live_after)
+            }
+            BlockBody::AssertType { ty, arg, next, .. } => {
+                let (next, mut live) = self.analyze_body(*next);
+                add_imm(&mut live, &arg);
+                let ana = live.clone();
+                (BlockBody::AssertType { ty, arg, next: Box::new(next), ana }, live)
+            }
+            BlockBody::AssertLength { len, next, .. } => {
+                let (next, mut live) = self.analyze_body(*next);
+                add_imm(&mut live, &len);
+                let ana = live.clone();
+                (BlockBody::AssertLength { len, next: Box::new(next), ana }, live)
+            }
+            BlockBody::AssertInBounds { bound, arg, next, .. } => {
+                let (next, mut live) = self.analyze_body(*next);
+                add_imm(&mut live, &bound);
+                add_imm(&mut live, &arg);
+                let ana = live.clone();
+                (BlockBody::AssertInBounds { bound, arg, next: Box::new(next), ana }, live)
+            }
+            BlockBody::Store { addr, offset, val, next, .. } => {
+                let (next, mut live) = self.analyze_body(*next);
+                add_imm(&mut live, &addr);
+                add_imm(&mut live, &offset);
+                add_imm(&mut live, &val);
+                let ana = live.clone();
+                (BlockBody::Store { addr, offset, val, next: Box::new(next), ana }, live)
+            }
+        }
+    }
+}
+
+/// add the variable referenced by an immediate to a live set (constants contribute nothing)
+fn add_imm(live: &mut LiveSet, imm: &Immediate<VarName>) {
+    if let Immediate::Var(v) = imm {
+        live.insert(v.clone());
     }
 }
 
