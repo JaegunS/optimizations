@@ -1045,7 +1045,7 @@ impl PossibleValues {
 
     /// The greatest [`PossibleValues`]
     fn top() -> Self {
-        PossibleValues::Assigned([PossibleBitValues::Any; 2])
+        PossibleValues::Assigned([PossibleBitValues::Any, PossibleBitValues::Any])
     }
 
     /// The possible values of an integer that is assigned
@@ -1341,12 +1341,15 @@ impl AssertionRemover {
     fn flow_operation(
         &mut self, dest: &VarName, op: &Operation<VarName>, pre: &PossibleValuesEnv,
     ) -> PossibleValuesEnv {
-        let mut post = pre.to_owned();
+        let mut post = pre.clone();
         post.0.insert(
-            dest.to_owned(), 
+            dest.clone(), 
             match op {
                 Operation::Immediate(immediate) => {
-                    pre.possible_values(immediate)
+                    match immediate {
+                        Immediate::Const(_) => PossibleValues::integer(),
+                        Immediate::Var(_) => pre.possible_values(immediate),
+                    }
                 },
                 Operation::Prim1(prim1, immediate) => {
                     match pre.possible_values(immediate) { 
@@ -1380,25 +1383,8 @@ impl AssertionRemover {
                         (PossibleValues::None, _) | (_, PossibleValues::None) => PossibleValues::None,
                         (PossibleValues::Assigned([b1, b2]), PossibleValues::Assigned([c1, c2])) => {
                             match prim2 {
-                                Prim2::Add | Prim2::Sub => {
-                                    match (b2, c2) {
-                                        (PossibleBitValues::Zero, PossibleBitValues::Zero) => {
-                                            PossibleValues::integer()
-                                        },
-                                        (_, _) => PossibleValues::None
-                                    }
-                                }
-                                Prim2::Mul => {
-                                    match (b2, c2) {
-                                        (PossibleBitValues::Zero, PossibleBitValues::Zero) => {
-                                            match (b1, c1) {
-                                                (PossibleBitValues::Any, _) | (_, PossibleBitValues::Any) => PossibleValues::Assigned([PossibleBitValues::Any, PossibleBitValues::Zero]),
-                                                (PossibleBitValues::Zero, PossibleBitValues::Zero) | (PossibleBitValues::One, PossibleBitValues::One) => PossibleValues::Assigned([PossibleBitValues::Zero, PossibleBitValues::Zero]),
-                                                (PossibleBitValues::Zero, PossibleBitValues::One) | (PossibleBitValues::One, PossibleBitValues::Zero) => PossibleValues::Assigned([PossibleBitValues::One, PossibleBitValues::Zero]),
-                                            }
-                                        },
-                                        (_, _) => PossibleValues::None
-                                    }
+                                Prim2::Add | Prim2::Sub | Prim2::Mul => {
+                                    PossibleValues::integer()
                                 }
                                 Prim2::BitAnd => {
                                     PossibleValues::Assigned([
@@ -1509,7 +1495,7 @@ impl AssertionRemover {
         match *next.clone() {
             BlockBody::AssertType {next: a_next, ana: a_ana, ..} => {
                 if ana == a_ana {
-                    n = Box::new(self.remove_block_body_assertions(*a_next));
+                    n = self.next_removed_body(a_next, ana);
                 } else {
                     n = Box::new(self.remove_block_body_assertions(*next));
                 }
