@@ -1062,6 +1062,17 @@ impl PossibleValues {
     fn array() -> Self {
         PossibleValues::Assigned([PossibleBitValues::One, PossibleBitValues::One])
     }
+
+    /// returns true iff every concrete value described by self is also described by other
+    fn subset_of(self, other: Self) -> bool {
+        match (self, other) {
+            (PossibleValues::None, _) => true,
+            (_, PossibleValues::None) => false,
+            (PossibleValues::Assigned([b1, b2]), PossibleValues::Assigned([c1, c2])) => {
+                b1.subset_of(c1) && b2.subset_of(c2)
+            }
+        }
+    }
 }
 
 /// Possible values of a bit that is assigned.
@@ -1080,6 +1091,16 @@ impl PossibleBitValues {
     fn lub(self, other: Self) -> Self {
         if self == other {self} else {PossibleBitValues::Any}
     }
+
+    /// Returns true iff every concrete bit described by self is also described by other.
+    fn subset_of(self, other: Self) -> bool {
+        match (self, other) {
+            (_, PossibleBitValues::Any) => true,
+            (PossibleBitValues::Zero, PossibleBitValues::Zero) => true,
+            (PossibleBitValues::One, PossibleBitValues::One) => true,
+            _ => false,
+        }
+    }
 }
 
 /// The [`PossibleValuesEnv`] is stored at every node.
@@ -1094,7 +1115,14 @@ impl PossibleValuesEnv {
 
     /// mutably update self to be its least upper bound with other
     fn lub_mut(&mut self, other: Self) {
-        self.0.iter_mut().for_each(|value| match other.0.get(value.0) {None => {} Some(o) => {value.1.lub_mut(o.to_owned())}})
+        for (k, v) in other.0 {
+            match self.0.get_mut(&k) {
+                Some(existing) => existing.lub_mut(v),
+                None => {
+                    self.0.insert(k, v);
+                }
+            }
+        }
     }
 
     /// Produces the possible values an immediate may have based on the
@@ -1270,8 +1298,8 @@ impl AssertionRemover {
                 AssertType {
                     ty,
                     arg,
-                    next: Box::new(self.analyze_block_body(*next, pre)),
-                    ana: post
+                    next: Box::new(self.analyze_block_body(*next, &post)),
+                    ana: pre.clone(),
                 }
             }
             AssertLength { len, next, .. } => AssertLength {
@@ -1370,10 +1398,18 @@ impl AssertionRemover {
                                 ])
                             },
                             Prim1::BitSal(i) | Prim1::BitShl(i) => {
-                                if *i == 0 {pre.possible_values(immediate)} else {PossibleValues::Assigned([b2, PossibleBitValues::Zero])}
+                                match *i {
+                                    0 => pre.possible_values(immediate),
+                                    1 => PossibleValues::Assigned([b2, PossibleBitValues::Zero]),
+                                    _ => PossibleValues::Assigned([PossibleBitValues::Zero, PossibleBitValues::Zero]),
+                                }
                             },
                             Prim1::BitSar(i) | Prim1::BitShr(i) => {
-                                if *i == 0 {pre.possible_values(immediate)} else {PossibleValues::Assigned([PossibleBitValues::Any, b1])}
+                                match *i {
+                                    0 => pre.possible_values(immediate),
+                                    1 => PossibleValues::Assigned([PossibleBitValues::Any, b1]),
+                                    _ => PossibleValues::Assigned([PossibleBitValues::Any, PossibleBitValues::Any]),
+                                }
                             }
                     }
                     }
@@ -1467,42 +1503,64 @@ impl AssertionRemover {
     ) -> BlockBody<VarName, Nil> {
         match b {
             BlockBody::Terminator(t, _) => BlockBody::Terminator(t, Nil),
-            BlockBody::Operation { dest, op, next, ana } => {
-                BlockBody::Operation { dest, op, next: self.next_removed_body(next, ana), ana: Nil }
+            BlockBody::Operation { dest, op, next, .. } => {
+                BlockBody::Operation {
+                    dest,
+                    op,
+                    next: Box::new(self.remove_block_body_assertions(*next)),
+                    ana: Nil,
+                }
             },
-            BlockBody::SubBlocks { blocks, next, ana } => {
-                BlockBody::SubBlocks { blocks: blocks.into_iter().map(|basic| self.remove_basic_block_assertions(basic)).collect(), next: self.next_removed_body(next, ana), ana: Nil }
+            BlockBody::SubBlocks { blocks, next, .. } => {
+                BlockBody::SubBlocks {
+                    blocks: blocks.into_iter().map(|basic| self.remove_basic_block_assertions(basic)).collect(),
+                    next: Box::new(self.remove_block_body_assertions(*next)),
+                    ana: Nil,
+                }
             },
             BlockBody::AssertType { ty, arg, next, ana } => {
-                BlockBody::AssertType { ty, arg, next: self.next_removed_body(next, ana), ana: Nil }
+                let arg_pv = ana.possible_values(&arg);
+                let target_pv = match ty {
+                    Type::Int => PossibleValues::integer(),
+                    Type::Bool => PossibleValues::boolean(),
+                    Type::Array => PossibleValues::array(),
+                };
+                if arg_pv.subset_of(target_pv) {
+                    self.remove_block_body_assertions(*next)
+                } else {
+                    BlockBody::AssertType {
+                        ty,
+                        arg,
+                        next: Box::new(self.remove_block_body_assertions(*next)),
+                        ana: Nil,
+                    }
+                }
             },
-            BlockBody::AssertLength { len, next, ana } => {
-                BlockBody::AssertLength { len, next: self.next_removed_body(next, ana), ana: Nil }
+            BlockBody::AssertLength { len, next, .. } => {
+                BlockBody::AssertLength {
+                    len,
+                    next: Box::new(self.remove_block_body_assertions(*next)),
+                    ana: Nil,
+                }
             },
-            BlockBody::AssertInBounds { bound, arg, next, ana } => {
-                BlockBody::AssertInBounds { bound, arg, next: self.next_removed_body(next, ana), ana: Nil }
+            BlockBody::AssertInBounds { bound, arg, next, .. } => {
+                BlockBody::AssertInBounds {
+                    bound,
+                    arg,
+                    next: Box::new(self.remove_block_body_assertions(*next)),
+                    ana: Nil,
+                }
             },
-            BlockBody::Store { addr, offset, val, next, ana } => {
-                BlockBody::Store { addr, offset, val, next: self.next_removed_body(next, ana), ana: Nil }
+            BlockBody::Store { addr, offset, val, next, .. } => {
+                BlockBody::Store {
+                    addr,
+                    offset,
+                    val,
+                    next: Box::new(self.remove_block_body_assertions(*next)),
+                    ana: Nil,
+                }
             },
         }
-    }
-
-    fn next_removed_body(
-        &mut self, next: Box<BlockBody<VarName, PossibleValuesEnv>>, ana: PossibleValuesEnv
-    ) -> Box<BlockBody<VarName, Nil>> {
-        let n;
-        match *next.clone() {
-            BlockBody::AssertType {next: a_next, ana: a_ana, ..} => {
-                if ana == a_ana {
-                    n = self.next_removed_body(a_next, ana);
-                } else {
-                    n = Box::new(self.remove_block_body_assertions(*next));
-                }
-            }
-            _ => {n = Box::new(self.remove_block_body_assertions(*next));}
-        };
-        n
     }
 }
 
