@@ -1373,12 +1373,8 @@ impl AssertionRemover {
         post.0.insert(
             dest.clone(), 
             match op {
-                Operation::Immediate(immediate) => {
-                    match immediate {
-                        Immediate::Const(_) => PossibleValues::integer(),
-                        Immediate::Var(_) => pre.possible_values(immediate),
-                    }
-                },
+                Operation::Immediate(immediate) => pre.possible_values(immediate), // maybe
+                // it doesn't need to be an int?
                 Operation::Prim1(prim1, immediate) => {
                     match pre.possible_values(immediate) { 
                         PossibleValues::None => PossibleValues::None,
